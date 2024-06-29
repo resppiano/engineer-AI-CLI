@@ -22,17 +22,17 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
    cd claude-engineer
    ```
 
-2. Install the required dependencies:
+2. Install the required dependencies and copy the `.env` file:
    ```
    pip install -r requirements.txt
+   cp .env.sample .env
    ```
 
-3. Set up your API keys:
-   - Add your Anthropic and Tavily API keys at the start of the file:
-     ```python
-     client = Anthropic(api_key="YOUR API KEY")
-     tavily = TavilyClient(api_key="YOUR API KEY")
-     ```
+3. Set up your API keys in `.env` with your API keys
+   ```
+   ANTHROPIC_API_KEY=YOUR_ANTHROPIC_KEY
+   TAVILY_API_KEY=YOUR_TAVILY_KEY
+   ```
 
 ## 🚀 Usage
 

@@ -1,17 +1,20 @@
-import os
-from datetime import datetime
-import json
-from colorama import init, Fore, Style
-from pygments import highlight
-from pygments.lexers import get_lexer_by_name
-from pygments.formatters import TerminalFormatter
-from tavily import TavilyClient
-import pygments.util
 import base64
-from PIL import Image
 import io
+import os
 import re
+
+import pygments.util
 from anthropic import Anthropic
+from colorama import Fore, Style, init
+from dotenv import load_dotenv
+from PIL import Image
+from pygments import highlight
+from pygments.formatters import TerminalFormatter
+from pygments.lexers import get_lexer_by_name
+from tavily import TavilyClient
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize colorama
 init()
@@ -27,10 +30,10 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR API KEY")
+client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR API KEY")
+tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
@@ -94,14 +97,22 @@ Answer the user's request using relevant tools (if they are available). Before c
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global system_prompt
-    automode_status = "You are currently in automode." if automode else "You are not in automode."
+    automode_status = (
+        "You are currently in automode."
+        if automode
+        else "You are not in automode."
+    )
     iteration_info = ""
     if current_iteration is not None and max_iterations is not None:
         iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
-    return system_prompt.format(automode_status=automode_status, iteration_info=iteration_info)
+    return system_prompt.format(
+        automode_status=automode_status, iteration_info=iteration_info
+    )
+
 
 def print_colored(text, color):
     print(f"{color}{text}{Style.RESET_ALL}")
+
 
 def print_code(code, language):
     try:
@@ -111,6 +122,7 @@ def print_code(code, language):
     except pygments.util.ClassNotFound:
         print_colored(f"Code (language: {language}):\n{code}", CLAUDE_COLOR)
 
+
 def create_folder(path):
     try:
         os.makedirs(path, exist_ok=True)
@@ -118,29 +130,33 @@ def create_folder(path):
     except Exception as e:
         return f"Error creating folder: {str(e)}"
 
+
 def create_file(path, content=""):
     try:
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(content)
         return f"File created: {path}"
     except Exception as e:
         return f"Error creating file: {str(e)}"
 
+
 def write_to_file(path, content):
     try:
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(content)
         return f"Content written to file: {path}"
     except Exception as e:
         return f"Error writing to file: {str(e)}"
 
+
 def read_file(path):
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             content = f.read()
         return content
     except Exception as e:
         return f"Error reading file: {str(e)}"
+
 
 def list_files(path="."):
     try:
@@ -149,12 +165,14 @@ def list_files(path="."):
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
+
 def tavily_search(query):
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
         return response
     except Exception as e:
         return f"Error performing search: {str(e)}"
+
 
 tools = [
     {
@@ -165,11 +183,11 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path where the folder should be created"
+                    "description": "The path where the folder should be created",
                 }
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "create_file",
@@ -179,15 +197,15 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path where the file should be created"
+                    "description": "The path where the file should be created",
                 },
                 "content": {
                     "type": "string",
-                    "description": "The initial content of the file (optional)"
-                }
+                    "description": "The initial content of the file (optional)",
+                },
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "write_to_file",
@@ -197,15 +215,15 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the file to write to"
+                    "description": "The path of the file to write to",
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to write to the file"
-                }
+                    "description": "The content to write to the file",
+                },
             },
-            "required": ["path", "content"]
-        }
+            "required": ["path", "content"],
+        },
     },
     {
         "name": "read_file",
@@ -215,11 +233,11 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the file to read"
+                    "description": "The path of the file to read",
                 }
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "list_files",
@@ -229,10 +247,10 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the folder to list (default: current directory)"
+                    "description": "The path of the folder to list (default: current directory)",
                 }
-            }
-        }
+            },
+        },
     },
     {
         "name": "tavily_search",
@@ -240,15 +258,13 @@ tools = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query"
-                }
+                "query": {"type": "string", "description": "The search query"}
             },
-            "required": ["query"]
-        }
-    }
+            "required": ["query"],
+        },
+    },
 ]
+
 
 def execute_tool(tool_name, tool_input):
     if tool_name == "create_folder":
@@ -266,22 +282,25 @@ def execute_tool(tool_name, tool_input):
     else:
         return f"Unknown tool: {tool_name}"
 
+
 def encode_image_to_base64(image_path):
     try:
         with Image.open(image_path) as img:
             max_size = (1024, 1024)
             img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
+            if img.mode != "RGB":
+                img = img.convert("RGB")
             img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='JPEG')
-            return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+            img.save(img_byte_arr, format="JPEG")
+            return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
     except Exception as e:
         return f"Error encoding image: {str(e)}"
 
+
 def parse_goals(response):
-    goals = re.findall(r'Goal \d+: (.+)', response)
+    goals = re.findall(r"Goal \d+: (.+)", response)
     return goals
+
 
 def execute_goals(goals):
     global automode
@@ -293,16 +312,20 @@ def execute_goals(goals):
             print_colored("Exiting automode.", TOOL_COLOR)
             break
 
+
 def chat_with_claude(user_input, image_path=None):
     global conversation_history, automode
-    
+
     if image_path:
         print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
         image_base64 = encode_image_to_base64(image_path)
-        
+
         if image_base64.startswith("Error"):
             print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
-            return "I'm sorry, there was an error processing the image. Please try again.", False
+            return (
+                "I'm sorry, there was an error processing the image. Please try again.",
+                False,
+            )
 
         image_message = {
             "role": "user",
@@ -312,22 +335,19 @@ def chat_with_claude(user_input, image_path=None):
                     "source": {
                         "type": "base64",
                         "media_type": "image/jpeg",
-                        "data": image_base64
-                    }
+                        "data": image_base64,
+                    },
                 },
-                {
-                    "type": "text",
-                    "text": f"User input for image: {user_input}"
-                }
-            ]
+                {"type": "text", "text": f"User input for image: {user_input}"},
+            ],
         }
         conversation_history.append(image_message)
         print_colored("Image message added to conversation history", TOOL_COLOR)
     else:
         conversation_history.append({"role": "user", "content": user_input})
-    
-    messages = [msg for msg in conversation_history if msg.get('content')]
-    
+
+    messages = [msg for msg in conversation_history if msg.get("content")]
+
     try:
         response = client.messages.create(
             model="claude-3-5-sonnet-20240620",
@@ -335,15 +355,18 @@ def chat_with_claude(user_input, image_path=None):
             system=update_system_prompt(),
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
         )
     except Exception as e:
         print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    
+        return (
+            "I'm sorry, there was an error communicating with the AI. Please try again.",
+            False,
+        )
+
     assistant_response = ""
     exit_continuation = False
-    
+
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
@@ -354,47 +377,60 @@ def chat_with_claude(user_input, image_path=None):
             tool_name = content_block.name
             tool_input = content_block.input
             tool_use_id = content_block.id
-            
+
             print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
             print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
+
             result = execute_tool(tool_name, tool_input)
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
+
+            conversation_history.append(
+                {"role": "assistant", "content": [content_block]}
+            )
+            conversation_history.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": result,
+                        }
+                    ],
+                }
+            )
+
             try:
                 tool_response = client.messages.create(
                     model="claude-3-5-sonnet-20240620",
                     max_tokens=4000,
                     system=update_system_prompt(),
-                    messages=[msg for msg in conversation_history if msg.get('content')],
+                    messages=[
+                        msg
+                        for msg in conversation_history
+                        if msg.get("content")
+                    ],
                     tools=tools,
-                    tool_choice={"type": "auto"}
+                    tool_choice={"type": "auto"},
                 )
-                
+
                 for tool_content_block in tool_response.content:
                     if tool_content_block.type == "text":
                         assistant_response += tool_content_block.text
-                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
+                        print_colored(
+                            f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR
+                        )
             except Exception as e:
                 print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while processing the tool result. Please try again."
-    
+
     if assistant_response:
-        conversation_history.append({"role": "assistant", "content": assistant_response})
-    
+        conversation_history.append(
+            {"role": "assistant", "content": assistant_response}
+        )
+
     return assistant_response, exit_continuation
+
 
 def process_and_display_response(response):
     if response.startswith("Error") or response.startswith("I'm sorry"):
@@ -406,10 +442,10 @@ def process_and_display_response(response):
                 if i % 2 == 0:
                     print_colored(part, CLAUDE_COLOR)
                 else:
-                    lines = part.split('\n')
+                    lines = part.split("\n")
                     language = lines[0].strip() if lines else ""
-                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-                    
+                    code = "\n".join(lines[1:]) if len(lines) > 1 else ""
+
                     if language and code:
                         print_code(code, language)
                     elif code:
@@ -419,16 +455,22 @@ def process_and_display_response(response):
         else:
             print_colored(response, CLAUDE_COLOR)
 
-def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
+
+def chat_with_claude(
+    user_input, image_path=None, current_iteration=None, max_iterations=None
+):
     global conversation_history, automode
-    
+
     if image_path:
         print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
         image_base64 = encode_image_to_base64(image_path)
-        
+
         if image_base64.startswith("Error"):
             print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
-            return "I'm sorry, there was an error processing the image. Please try again.", False
+            return (
+                "I'm sorry, there was an error processing the image. Please try again.",
+                False,
+            )
 
         image_message = {
             "role": "user",
@@ -438,22 +480,19 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                     "source": {
                         "type": "base64",
                         "media_type": "image/jpeg",
-                        "data": image_base64
-                    }
+                        "data": image_base64,
+                    },
                 },
-                {
-                    "type": "text",
-                    "text": f"User input for image: {user_input}"
-                }
-            ]
+                {"type": "text", "text": f"User input for image: {user_input}"},
+            ],
         }
         conversation_history.append(image_message)
         print_colored("Image message added to conversation history", TOOL_COLOR)
     else:
         conversation_history.append({"role": "user", "content": user_input})
-    
-    messages = [msg for msg in conversation_history if msg.get('content')]
-    
+
+    messages = [msg for msg in conversation_history if msg.get("content")]
+
     try:
         response = client.messages.create(
             model="claude-3-5-sonnet-20240620",
@@ -461,15 +500,18 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             system=update_system_prompt(current_iteration, max_iterations),
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
         )
     except Exception as e:
         print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    
+        return (
+            "I'm sorry, there was an error communicating with the AI. Please try again.",
+            False,
+        )
+
     assistant_response = ""
     exit_continuation = False
-    
+
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
@@ -480,112 +522,175 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             tool_name = content_block.name
             tool_input = content_block.input
             tool_use_id = content_block.id
-            
+
             print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
             print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
+
             result = execute_tool(tool_name, tool_input)
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
+
+            conversation_history.append(
+                {"role": "assistant", "content": [content_block]}
+            )
+            conversation_history.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": result,
+                        }
+                    ],
+                }
+            )
+
             try:
                 tool_response = client.messages.create(
                     model="claude-3-5-sonnet-20240620",
                     max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=[msg for msg in conversation_history if msg.get('content')],
+                    system=update_system_prompt(
+                        current_iteration, max_iterations
+                    ),
+                    messages=[
+                        msg
+                        for msg in conversation_history
+                        if msg.get("content")
+                    ],
                     tools=tools,
-                    tool_choice={"type": "auto"}
+                    tool_choice={"type": "auto"},
                 )
-                
+
                 for tool_content_block in tool_response.content:
                     if tool_content_block.type == "text":
                         assistant_response += tool_content_block.text
-                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
+                        print_colored(
+                            f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR
+                        )
             except Exception as e:
                 print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while processing the tool result. Please try again."
-    
+
     if assistant_response:
-        conversation_history.append({"role": "assistant", "content": assistant_response})
-    
+        conversation_history.append(
+            {"role": "assistant", "content": assistant_response}
+        )
+
     return assistant_response, exit_continuation
+
 
 def main():
     global automode
-    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
+    print_colored(
+        "Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!",
+        CLAUDE_COLOR,
+    )
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
-    print_colored("Type 'image' to include an image in your message.", CLAUDE_COLOR)
-    print_colored("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.", CLAUDE_COLOR)
-    print_colored("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.", CLAUDE_COLOR)
-    
+    print_colored(
+        "Type 'image' to include an image in your message.", CLAUDE_COLOR
+    )
+    print_colored(
+        "Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.",
+        CLAUDE_COLOR,
+    )
+    print_colored(
+        "While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.",
+        CLAUDE_COLOR,
+    )
+
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-        
-        if user_input.lower() == 'exit':
+
+        if user_input.lower() == "exit":
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
-        
-        if user_input.lower() == 'image':
-            image_path = input(f"{USER_COLOR}Drag and drop your image here: {Style.RESET_ALL}").strip().replace("'", "")
-            
+
+        if user_input.lower() == "image":
+            image_path = (
+                input(
+                    f"{USER_COLOR}Drag and drop your image here: {Style.RESET_ALL}"
+                )
+                .strip()
+                .replace("'", "")
+            )
+
             if os.path.isfile(image_path):
-                user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
+                user_input = input(
+                    f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}"
+                )
                 response, _ = chat_with_claude(user_input, image_path)
                 process_and_display_response(response)
             else:
-                print_colored("Invalid image path. Please try again.", CLAUDE_COLOR)
+                print_colored(
+                    "Invalid image path. Please try again.", CLAUDE_COLOR
+                )
                 continue
-        elif user_input.lower().startswith('automode'):
+        elif user_input.lower().startswith("automode"):
             try:
                 parts = user_input.split()
                 if len(parts) > 1 and parts[1].isdigit():
                     max_iterations = int(parts[1])
                 else:
                     max_iterations = MAX_CONTINUATION_ITERATIONS
-                
+
                 automode = True
-                print_colored(f"Entering automode with {max_iterations} iterations. Press Ctrl+C to exit automode at any time.", TOOL_COLOR)
-                print_colored("Press Ctrl+C at any time to exit the automode loop.", TOOL_COLOR)
+                print_colored(
+                    f"Entering automode with {max_iterations} iterations. Press Ctrl+C to exit automode at any time.",
+                    TOOL_COLOR,
+                )
+                print_colored(
+                    "Press Ctrl+C at any time to exit the automode loop.",
+                    TOOL_COLOR,
+                )
                 user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-                
+
                 iteration_count = 0
                 while automode and iteration_count < max_iterations:
-                    response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                    response, exit_continuation = chat_with_claude(
+                        user_input,
+                        current_iteration=iteration_count + 1,
+                        max_iterations=max_iterations,
+                    )
                     process_and_display_response(response)
-                    
-                    if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
+
+                    if (
+                        exit_continuation
+                        or CONTINUATION_EXIT_PHRASE in response
+                    ):
                         print_colored("Automode completed.", TOOL_COLOR)
                         automode = False
                     else:
-                        print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
-                        print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
+                        print_colored(
+                            f"Continuation iteration {iteration_count + 1} completed.",
+                            TOOL_COLOR,
+                        )
+                        print_colored(
+                            "Press Ctrl+C to exit automode.", TOOL_COLOR
+                        )
                         user_input = "Continue with the next step."
-                    
+
                     iteration_count += 1
-                    
+
                     if iteration_count >= max_iterations:
-                        print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
+                        print_colored(
+                            "Max iterations reached. Exiting automode.",
+                            TOOL_COLOR,
+                        )
                         automode = False
             except KeyboardInterrupt:
-                print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
+                print_colored(
+                    "\nAutomode interrupted by user. Exiting automode.",
+                    TOOL_COLOR,
+                )
                 automode = False
-            
-            print_colored("Exited automode. Returning to regular chat.", TOOL_COLOR)
+
+            print_colored(
+                "Exited automode. Returning to regular chat.", TOOL_COLOR
+            )
         else:
             response, _ = chat_with_claude(user_input)
             process_and_display_response(response)
+
 
 if __name__ == "__main__":
     main()
