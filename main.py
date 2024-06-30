@@ -2,7 +2,7 @@ import base64
 import io
 import os
 import re
-
+import fnmatch
 import pygments.util
 from anthropic import Anthropic
 from colorama import Fore, Style, init
@@ -161,6 +161,22 @@ def read_file(path):
 def list_files(path="."):
     try:
         files = os.listdir(path)
+
+        # Check for .gitignore file
+        if ".gitignore" in files:
+            with open(".gitignore", "r") as f:
+                gitignore_patterns = f.read().splitlines()
+
+            # Filter out files and directories matching .gitignore patterns
+            files = [
+                f
+                for f in files
+                if not any(
+                    fnmatch.fnmatch(f, pattern)
+                    for pattern in gitignore_patterns
+                )
+            ]
+
         return "\n".join(files)
     except Exception as e:
         return f"Error listing files: {str(e)}"
